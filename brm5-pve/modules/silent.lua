@@ -6,37 +6,36 @@ local TargetSizing = {}
 TargetSizing.originalSizes = {} -- Storage for original sizes to restore them later
 
 -- Adjusts the NPC target bounds
-function TargetSizing:applyTargetSizing(model, root, config)
-    if not self.originalSizes[model] then 
-        self.originalSizes[model] = root.Size 
+function TargetSizing:applyTargetSizing(model, part, config)
+    -- Track original sizes by the specific part instance instead of the model
+    if not self.originalSizes[part] then 
+        self.originalSizes[part] = part.Size 
     end
     
-    if root.Size ~= config.TARGET_BOX_SIZE then
-        root.Size = config.TARGET_BOX_SIZE
+    if part.Size ~= config.TARGET_BOX_SIZE then
+        part.Size = config.TARGET_BOX_SIZE
     end
     local targetTransparency = config.showTargetBox and 0.85 or 1
-    if root.Transparency ~= targetTransparency then
-        root.Transparency = targetTransparency -- If showTargetBox is true, you'll see a faint target box
+    if part.Transparency ~= targetTransparency then
+        part.Transparency = targetTransparency 
     end
-    if not root.CanCollide then
-        root.CanCollide = true
+    if not part.CanCollide then
+        part.CanCollide = true
     end
 end
 
 -- Restores target bounds to their normal size
-function TargetSizing:restoreOriginalSize(model, npcManager)
-    local data = npcManager:getActiveNPCs()[model]
-    local root = data and data.root
-    if not root then
-        local character = data and data.character
-        root = character and npcManager.getRootPart(character) or npcManager.getRootPart(model)
+function TargetSizing:restoreOriginalSize()
+    for part, originalSize in pairs(self.originalSizes) do
+        if part and part.Parent then
+            pcall(function()
+                part.Size = originalSize
+                part.Transparency = 0 -- Revert head back to visible texturing
+                part.CanCollide = true
+            end)
+        end
     end
-    if root and self.originalSizes[model] then
-        root.Size = self.originalSizes[model]
-        root.Transparency = 1
-        root.CanCollide = false
-    end
-    self.originalSizes[model] = nil
+    self.originalSizes = {}
 end
 
 -- Updates target bounds for all NPCs based on config
@@ -47,8 +46,16 @@ function TargetSizing:updateAllTargets(npcManager, config)
         end
         return
     end
+    
     for model, data in pairs(npcManager:getActiveNPCs()) do
-        if data.root then
+        -- Find the NPC's actual Head part recursively
+        local headPart = model:FindFirstChild("Head", true)
+        
+        if headPart and headPart:IsA("BasePart") then
+            -- Expand the Head instead of the torso root
+            self:applyTargetSizing(model, headPart, config)
+        elseif data.root then
+            -- Fallback to default body root if the head can't be found
             self:applyTargetSizing(model, data.root, config)
         end
     end
@@ -56,9 +63,7 @@ end
 
 -- Cleanup all adjusted target bounds
 function TargetSizing:cleanup(npcManager)
-    for model, _ in pairs(self.originalSizes) do
-        self:restoreOriginalSize(model, npcManager)
-    end
+    self:restoreOriginalSize()
 end
 
 return TargetSizing
