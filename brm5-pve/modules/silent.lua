@@ -7,6 +7,7 @@ TargetSizing.originalSizes = {} -- Storage for original sizes to restore them la
 
 -- Adjusts the NPC target bounds
 function TargetSizing:applyTargetSizing(model, part, config)
+    -- Track original sizes by the specific part instance instead of the model
     if not self.originalSizes[part] then 
         self.originalSizes[part] = part.Size 
     end
@@ -16,7 +17,7 @@ function TargetSizing:applyTargetSizing(model, part, config)
     end
     local targetTransparency = config.showTargetBox and 0.85 or 1
     if part.Transparency ~= targetTransparency then
-        part.Transparency = targetTransparency -- If showTargetBox is true, you'll see a faint target box
+        part.Transparency = targetTransparency 
     end
     if not part.CanCollide then
         part.CanCollide = true
@@ -24,12 +25,12 @@ function TargetSizing:applyTargetSizing(model, part, config)
 end
 
 -- Restores target bounds to their normal size
-function TargetSizing:restoreOriginalSize(npcManager)
+function TargetSizing:restoreOriginalSize()
     for part, originalSize in pairs(self.originalSizes) do
         if part and part.Parent then
             pcall(function()
                 part.Size = originalSize
-                part.Transparency = 0 -- Reset back to default visible texture instead of invisible
+                part.Transparency = 0 -- Revert head back to visible texturing
                 part.CanCollide = true
             end)
         end
@@ -45,13 +46,16 @@ function TargetSizing:updateAllTargets(npcManager, config)
         end
         return
     end
+    
     for model, data in pairs(npcManager:getActiveNPCs()) do
-        -- We force the target selection to grab the Head instead of data.root
-        local headPart = model:FindFirstChild("Head")
+        -- Find the NPC's actual Head part recursively
+        local headPart = model:FindFirstChild("Head", true)
+        
         if headPart and headPart:IsA("BasePart") then
+            -- Expand the Head instead of the torso root
             self:applyTargetSizing(model, headPart, config)
         elseif data.root then
-            -- Fallback option just in case an NPC model doesn't have a head
+            -- Fallback to default body root if the head can't be found
             self:applyTargetSizing(model, data.root, config)
         end
     end
@@ -59,7 +63,7 @@ end
 
 -- Cleanup all adjusted target bounds
 function TargetSizing:cleanup(npcManager)
-    self:restoreOriginalSize(npcManager)
+    self:restoreOriginalSize()
 end
 
 return TargetSizing
